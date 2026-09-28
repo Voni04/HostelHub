@@ -6,7 +6,8 @@ const cors = require("cors");
 require("dotenv").config();
 // Import authentication routes for register and login APIs
 const authRoutes = require("./routes/authRoutes");
-
+// Import Room routes for Room CRUD operations
+const roomRoutes = require("./routes/roomRoutes");
 const app = express();
 
 // Middleware
@@ -14,6 +15,8 @@ app.use(cors());
 app.use(express.json());
 // Connect authentication routes to /api/auth
 app.use("/api/auth", authRoutes);
+// Connect Room routes to /api/rooms
+app.use("/api/rooms", roomRoutes);
 // Test route
 app.get("/", (req, res) => {
   res.status(200).json({
