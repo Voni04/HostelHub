@@ -1,14 +1,19 @@
+// Import required packages
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+// Load environment variables from the .env file
 require("dotenv").config();
+// Import authentication routes for register and login APIs
+const authRoutes = require("./routes/authRoutes");
 
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-
+// Connect authentication routes to /api/auth
+app.use("/api/auth", authRoutes);
 // Test route
 app.get("/", (req, res) => {
   res.status(200).json({
