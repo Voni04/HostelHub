@@ -10,6 +10,7 @@ const {
   getAllBookings,
   getBookingById,
   updateBooking,
+  updateBookingStatus,
   deleteBooking,
 } = require("../controllers/bookingController");
 
@@ -39,9 +40,21 @@ router.get("/", protect, getAllBookings);
 // GET /api/bookings/:id
 router.get("/:id", protect, getBookingById);
 
-// Update one booking.
+// Update booking dates.
 // PUT /api/bookings/:id
 router.put("/:id", protect, updateBooking);
+
+// Update the status of a booking.
+//
+// This route is used to approve or reject
+// a Pending booking.
+//
+// PATCH /api/bookings/:id/status
+router.patch(
+  "/:id/status",
+  protect,
+  updateBookingStatus
+);
 
 // Delete one booking.
 // DELETE /api/bookings/:id

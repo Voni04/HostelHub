@@ -2,14 +2,14 @@
 // useState stores data that can change.
 import { useEffect, useState } from 'react';
 
-// useLocalSearchParams lets us receive the booking ID
-// that was passed from the Bookings screen.
+// router lets us navigate between screens.
+// useLocalSearchParams receives the booking ID.
 import {
   router,
   useLocalSearchParams,
 } from 'expo-router';
 
-// SecureStore lets us read the saved JWT token.
+// SecureStore lets us securely read the saved JWT token.
 import * as SecureStore from 'expo-secure-store';
 
 // React Native components used to build the screen.
@@ -43,6 +43,8 @@ type BookingRoom = {
   roomNumber: string;
   roomType: string;
   pricePerMonth: number;
+  capacity: number;
+  currentOccupancy: number;
   availabilityStatus: string;
 };
 
@@ -74,9 +76,11 @@ export default function BookingDetailsScreen() {
   // Loading is shown while retrieving the booking.
   const [loading, setLoading] = useState(true);
 
-  // Deleting prevents the Delete button from being
-  // pressed repeatedly while deletion is happening.
+  // Deleting prevents repeated Delete requests.
   const [deleting, setDeleting] = useState(false);
+
+  // UpdatingStatus prevents repeated Approve/Reject requests.
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
 
   // ======================================================
@@ -113,11 +117,7 @@ export default function BookingDetailsScreen() {
         return;
       }
 
-      // Backend returns:
-      // {
-      //   message: "...",
-      //   booking: {...}
-      // }
+      // Store the booking returned by the backend.
       setBooking(data.booking);
     } catch (error) {
       Alert.alert(
@@ -136,6 +136,126 @@ export default function BookingDetailsScreen() {
       fetchBooking();
     }
   }, [id]);
+
+
+  // ======================================================
+  // APPROVE OR REJECT BOOKING
+  // ======================================================
+
+  const updateBookingStatus = async (
+    newStatus: 'Approved' | 'Rejected'
+  ) => {
+    try {
+      // Disable the status buttons while the request runs.
+      setUpdatingStatus(true);
+
+      // Read the JWT saved during login.
+      const token = await SecureStore.getItemAsync('userToken');
+
+      // Send the new status to our backend.
+      //
+      // Example:
+      // PATCH /api/bookings/BOOKING_ID/status
+      //
+      // Body:
+      // {
+      //   "status": "Approved"
+      // }
+      const response = await fetch(
+        `${API_URL}/bookings/${id}/status`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            status: newStatus,
+          }),
+        }
+      );
+
+      // Convert the backend response into JavaScript data.
+      const data = await response.json();
+
+      // Show the backend error if the request failed.
+      if (!response.ok) {
+        Alert.alert(
+          'Status Update Failed',
+          data.message || 'Unable to update booking status'
+        );
+        return;
+      }
+
+      // Tell the user whether approval or rejection succeeded.
+      Alert.alert(
+        'Success',
+        newStatus === 'Approved'
+          ? 'Booking approved successfully'
+          : 'Booking rejected successfully'
+      );
+
+      // Reload the booking from the backend.
+      //
+      // This makes the displayed Status change from
+      // Pending to Approved or Rejected.
+      await fetchBooking();
+    } catch (error) {
+      Alert.alert(
+        'Connection Error',
+        'Unable to connect to the server'
+      );
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+
+  // ======================================================
+  // CONFIRM APPROVAL
+  // ======================================================
+
+  const confirmApprove = () => {
+    Alert.alert(
+      'Approve Booking',
+      'Are you sure you want to approve this booking?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Approve',
+          onPress: () =>
+            updateBookingStatus('Approved'),
+        },
+      ]
+    );
+  };
+
+
+  // ======================================================
+  // CONFIRM REJECTION
+  // ======================================================
+
+  const confirmReject = () => {
+    Alert.alert(
+      'Reject Booking',
+      'Are you sure you want to reject this booking?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Reject',
+          style: 'destructive',
+          onPress: () =>
+            updateBookingStatus('Rejected'),
+        },
+      ]
+    );
+  };
 
 
   // ======================================================
@@ -171,7 +291,8 @@ export default function BookingDetailsScreen() {
         return;
       }
 
-      // Tell the user deletion was successful.
+      // If this was an Approved booking,
+      // the backend also releases its room occupancy.
       Alert.alert(
         'Success',
         'Booking deleted successfully',
@@ -213,7 +334,10 @@ export default function BookingDetailsScreen() {
   };
 
 
-  // Show loading indicator while fetching data.
+  // ======================================================
+  // LOADING SCREEN
+  // ======================================================
+
   if (loading) {
     return (
       <SafeAreaView style={styles.centerContainer}>
@@ -276,9 +400,59 @@ export default function BookingDetailsScreen() {
           <Text style={styles.detailText}>
             Email: {booking.userId.email}
           </Text>
+
+          <Text style={styles.detailText}>
+            Occupancy: {booking.roomId.currentOccupancy}
+            /{booking.roomId.capacity}
+          </Text>
+
+          <Text style={styles.detailText}>
+            Room Availability:{' '}
+            {booking.roomId.availabilityStatus}
+          </Text>
         </View>
 
-        {/* Later this button will open the Edit Booking screen. */}
+
+        {/* =================================================
+            APPROVE / REJECT
+
+            These buttons only appear while the booking
+            is still Pending.
+        ================================================= */}
+        {booking.status === 'Pending' && (
+          <View style={styles.statusButtons}>
+            <Pressable
+              style={[
+                styles.approveButton,
+                updatingStatus && styles.disabledButton,
+              ]}
+              onPress={confirmApprove}
+              disabled={updatingStatus}
+            >
+              <Text style={styles.buttonText}>
+                {updatingStatus
+                  ? 'UPDATING...'
+                  : 'APPROVE'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.rejectButton,
+                updatingStatus && styles.disabledButton,
+              ]}
+              onPress={confirmReject}
+              disabled={updatingStatus}
+            >
+              <Text style={styles.buttonText}>
+                REJECT
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
+
+        {/* Edit Booking button */}
         <Pressable
           style={styles.editButton}
           onPress={() =>
@@ -294,6 +468,7 @@ export default function BookingDetailsScreen() {
             EDIT BOOKING
           </Text>
         </Pressable>
+
 
         {/* Delete Booking button */}
         <Pressable
@@ -362,6 +537,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#4B5563',
     marginBottom: 8,
+  },
+
+  statusButtons: {
+    marginBottom: 12,
+  },
+
+  approveButton: {
+    backgroundColor: '#16A34A',
+    paddingVertical: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+
+  rejectButton: {
+    backgroundColor: '#F59E0B',
+    paddingVertical: 15,
+    borderRadius: 10,
+    alignItems: 'center',
   },
 
   editButton: {

@@ -2,8 +2,8 @@
 // and manage bookings in MongoDB.
 const Booking = require("../models/Booking");
 
-// Import the Room model so we can check
-// whether the requested room exists.
+// Import the Room model so we can check room capacity
+// and update occupancy and availability.
 const Room = require("../models/Room");
 
 
@@ -27,7 +27,7 @@ const createBooking = async (req, res) => {
       });
     }
 
-    // Check whether the selected room actually exists.
+    // Check whether the selected room exists.
     const room = await Room.findById(roomId);
 
     if (!room) {
@@ -36,7 +36,21 @@ const createBooking = async (req, res) => {
       });
     }
 
-    // Convert the supplied dates into JavaScript Date objects.
+    // ==================================================
+    // BUSINESS RULE:
+    // Do not allow a new booking request if the room
+    // has already reached its maximum capacity.
+    // ==================================================
+    if (
+      room.currentOccupancy >= room.capacity ||
+      room.availabilityStatus === "Unavailable"
+    ) {
+      return res.status(400).json({
+        message: "This room is currently full",
+      });
+    }
+
+    // Convert supplied dates into JavaScript Date objects.
     const start = new Date(startDate);
     const end = new Date(endDate);
 
@@ -50,7 +64,7 @@ const createBooking = async (req, res) => {
       });
     }
 
-    // The end date must be later than the start date.
+    // End date must be later than start date.
     if (end <= start) {
       return res.status(400).json({
         message:
@@ -60,19 +74,18 @@ const createBooking = async (req, res) => {
 
     // Create the booking.
     //
-    // req.userId comes from our JWT authentication middleware,
-    // so the logged-in user automatically becomes the booking owner.
+    // req.userId comes from JWT authentication middleware,
+    // so the logged-in user becomes the booking owner.
     const newBooking = await Booking.create({
       userId: req.userId,
       roomId: roomId,
       startDate: start,
       endDate: end,
 
-      // New bookings start as Pending.
+      // Every new booking starts as Pending.
       status: "Pending",
     });
 
-    // Return the newly created booking.
     res.status(201).json({
       message: "Booking created successfully",
       booking: newBooking,
@@ -95,19 +108,16 @@ const createBooking = async (req, res) => {
 // ======================================================
 const getAllBookings = async (req, res) => {
   try {
-    // Get all bookings from MongoDB.
-    //
     // populate() replaces the stored ObjectId references
-    // with useful information from User and Room.
+    // with selected information from User and Room.
     const bookings = await Booking.find()
       .populate("userId", "name email")
       .populate(
         "roomId",
-        "roomNumber roomType pricePerMonth availabilityStatus"
+        "roomNumber roomType pricePerMonth capacity currentOccupancy availabilityStatus"
       )
       .sort({ createdAt: -1 });
 
-    // Return all bookings.
     res.status(200).json({
       message: "Bookings retrieved successfully",
       count: bookings.length,
@@ -134,23 +144,19 @@ const getBookingById = async (req, res) => {
     // Get the booking ID from the URL.
     const bookingId = req.params.id;
 
-    // Find the booking and include its related
-    // User and Room information.
     const booking = await Booking.findById(bookingId)
       .populate("userId", "name email")
       .populate(
         "roomId",
-        "roomNumber roomType pricePerMonth availabilityStatus"
+        "roomNumber roomType pricePerMonth capacity currentOccupancy availabilityStatus"
       );
 
-    // Return 404 if the booking does not exist.
     if (!booking) {
       return res.status(404).json({
         message: "Booking not found",
       });
     }
 
-    // Return the selected booking.
     res.status(200).json({
       message: "Booking retrieved successfully",
       booking: booking,
@@ -169,14 +175,12 @@ const getBookingById = async (req, res) => {
 
 
 // ======================================================
-// UPDATE A BOOKING
+// UPDATE BOOKING DATES
 // ======================================================
 const updateBooking = async (req, res) => {
   try {
-    // Get the booking ID from the URL.
     const bookingId = req.params.id;
 
-    // Find the existing booking.
     const booking = await Booking.findById(bookingId);
 
     if (!booking) {
@@ -185,7 +189,7 @@ const updateBooking = async (req, res) => {
       });
     }
 
-    // If new dates were provided, use them.
+    // Use new dates when supplied.
     // Otherwise keep the existing dates.
     const start = req.body.startDate
       ? new Date(req.body.startDate)
@@ -195,7 +199,6 @@ const updateBooking = async (req, res) => {
       ? new Date(req.body.endDate)
       : booking.endDate;
 
-    // Validate the dates.
     if (
       Number.isNaN(start.getTime()) ||
       Number.isNaN(end.getTime())
@@ -205,7 +208,6 @@ const updateBooking = async (req, res) => {
       });
     }
 
-    // End date must be later than start date.
     if (end <= start) {
       return res.status(400).json({
         message:
@@ -213,18 +215,13 @@ const updateBooking = async (req, res) => {
       });
     }
 
-    // Update the booking dates.
+    // This endpoint only changes dates.
+    // Status changes are handled separately below.
     booking.startDate = start;
     booking.endDate = end;
 
-    // We are intentionally NOT changing booking status here.
-    // Approval/rejection will be handled separately when
-    // we implement the required booking business logic.
-
-    // Save the updated booking.
     const updatedBooking = await booking.save();
 
-    // Return the updated booking.
     res.status(200).json({
       message: "Booking updated successfully",
       booking: updatedBooking,
@@ -243,27 +240,165 @@ const updateBooking = async (req, res) => {
 
 
 // ======================================================
-// DELETE A BOOKING
+// UPDATE BOOKING STATUS
 // ======================================================
-const deleteBooking = async (req, res) => {
+// This controller handles approval and rejection.
+// Approval also updates Room occupancy.
+const updateBookingStatus = async (req, res) => {
   try {
-    // Get the booking ID from the URL.
     const bookingId = req.params.id;
 
-    // Find the booking before deleting it.
+    // Get the new status from the request body.
+    const { status } = req.body;
+
+    // Only Approved and Rejected are accepted here.
+    if (
+      status !== "Approved" &&
+      status !== "Rejected"
+    ) {
+      return res.status(400).json({
+        message:
+          "Status must be Approved or Rejected",
+      });
+    }
+
+    // Find the booking.
     const booking = await Booking.findById(bookingId);
 
-    // Return 404 if it does not exist.
     if (!booking) {
       return res.status(404).json({
         message: "Booking not found",
       });
     }
 
-    // Delete the booking from MongoDB.
+    // Prevent changing a booking that has already
+    // been approved or rejected.
+    if (booking.status !== "Pending") {
+      return res.status(400).json({
+        message:
+          "Only pending bookings can change status",
+      });
+    }
+
+    // Find the room connected to this booking.
+    const room = await Room.findById(booking.roomId);
+
+    if (!room) {
+      return res.status(404).json({
+        message: "Room not found",
+      });
+    }
+
+
+    // ==================================================
+    // APPROVE BOOKING
+    // ==================================================
+    if (status === "Approved") {
+      // Before approving, check that there is still space.
+      if (room.currentOccupancy >= room.capacity) {
+        // Keep room status correct if it is already full.
+        room.availabilityStatus = "Unavailable";
+        await room.save();
+
+        return res.status(400).json({
+          message:
+            "Cannot approve booking because the room is full",
+        });
+      }
+
+      // Increase occupancy by one.
+      room.currentOccupancy += 1;
+
+      // If occupancy has now reached capacity,
+      // mark the room as unavailable.
+      if (room.currentOccupancy >= room.capacity) {
+        room.availabilityStatus = "Unavailable";
+      } else {
+        room.availabilityStatus = "Available";
+      }
+
+      // Save the changed room.
+      await room.save();
+
+      // Change the booking status.
+      booking.status = "Approved";
+      await booking.save();
+
+      return res.status(200).json({
+        message: "Booking approved successfully",
+        booking: booking,
+        room: room,
+      });
+    }
+
+
+    // ==================================================
+    // REJECT BOOKING
+    // ==================================================
+    // Rejection does not occupy a place in the room.
+    booking.status = "Rejected";
+    await booking.save();
+
+    return res.status(200).json({
+      message: "Booking rejected successfully",
+      booking: booking,
+    });
+  } catch (error) {
+    console.error(
+      "Update booking status error:",
+      error.message
+    );
+
+    res.status(400).json({
+      message: "Unable to update booking status",
+    });
+  }
+};
+
+
+// ======================================================
+// DELETE A BOOKING
+// ======================================================
+const deleteBooking = async (req, res) => {
+  try {
+    const bookingId = req.params.id;
+
+    const booking = await Booking.findById(bookingId);
+
+    if (!booking) {
+      return res.status(404).json({
+        message: "Booking not found",
+      });
+    }
+
+
+    // ==================================================
+    // BUSINESS RULE:
+    // If an APPROVED booking is deleted, release
+    // the place that it occupied in the room.
+    // ==================================================
+    if (booking.status === "Approved") {
+      const room = await Room.findById(booking.roomId);
+
+      if (room) {
+        // Prevent occupancy from going below zero.
+        if (room.currentOccupancy > 0) {
+          room.currentOccupancy -= 1;
+        }
+
+        // If there is now free space,
+        // make the room available again.
+        if (room.currentOccupancy < room.capacity) {
+          room.availabilityStatus = "Available";
+        }
+
+        await room.save();
+      }
+    }
+
+    // Delete the booking itself.
     await booking.deleteOne();
 
-    // Return a success message.
     res.status(200).json({
       message: "Booking deleted successfully",
     });
@@ -287,5 +422,6 @@ module.exports = {
   getAllBookings,
   getBookingById,
   updateBooking,
+  updateBookingStatus,
   deleteBooking,
 };
