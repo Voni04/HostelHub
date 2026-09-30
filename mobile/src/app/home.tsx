@@ -1,5 +1,13 @@
+// router lets us navigate to other screens in the application.
+import { router } from 'expo-router';
+
 // React Native components used to build the Home screen.
-import { StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 // SafeAreaView keeps content inside the safe area of the phone.
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,16 +22,25 @@ export default function HomeScreen() {
         {/* Home screen heading */}
         <Text style={styles.title}>Home</Text>
 
-        {/* Temporary message */}
         <Text style={styles.message}>
-          You are successfully logged in!
+          Welcome to your hostel management system.
         </Text>
+
+        {/* This button navigates to the Rooms screen. */}
+        <Pressable
+          style={styles.roomsButton}
+          onPress={() => router.push('/rooms')}
+        >
+          <Text style={styles.roomsButtonText}>
+            VIEW ROOMS
+          </Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
 }
 
-// Styles for the Home screen.
+// Visual styles for the Home screen.
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -33,7 +50,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
     padding: 24,
   },
 
@@ -41,6 +57,7 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: 'bold',
     color: '#2563EB',
+    textAlign: 'center',
     marginBottom: 16,
   },
 
@@ -48,6 +65,7 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: 'bold',
     color: '#1F2937',
+    textAlign: 'center',
     marginBottom: 10,
   },
 
@@ -55,5 +73,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
     textAlign: 'center',
+    marginBottom: 30,
+  },
+
+  roomsButton: {
+    backgroundColor: '#2563EB',
+    paddingVertical: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+
+  roomsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

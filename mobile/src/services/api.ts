@@ -1,8 +1,10 @@
 // Base URL of our HostelHub backend API.
 //
-// During development, this is the local IP address
-// of the laptop running our Node.js/Express server.
+// This is the current local IP address of the laptop
+// running our Node.js/Express backend.
 //
-// The phone and laptop must be able to communicate
-// over the same network for this address to work.
-export const API_URL = 'http://192.168.60.155:5000/api';
+// This local IP is temporary and may change when
+// we connect the laptop to a different network.
+//
+// Later, we will replace this with our hosted backend URL.
+export const API_URL = 'http://192.168.1.3:5000/api';
