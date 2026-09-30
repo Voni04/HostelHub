@@ -31,8 +31,18 @@ export default function HomeScreen() {
           style={styles.roomsButton}
           onPress={() => router.push('/rooms')}
         >
-          <Text style={styles.roomsButtonText}>
+          <Text style={styles.buttonText}>
             VIEW ROOMS
+          </Text>
+        </Pressable>
+
+        {/* This button navigates to the Bookings screen. */}
+        <Pressable
+          style={styles.bookingsButton}
+          onPress={() => router.push('/bookings')}
+        >
+          <Text style={styles.buttonText}>
+            VIEW BOOKINGS
           </Text>
         </Pressable>
       </View>
@@ -76,14 +86,25 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
 
+  // Style for the Rooms button.
   roomsButton: {
     backgroundColor: '#2563EB',
     paddingVertical: 15,
     borderRadius: 10,
     alignItems: 'center',
+    marginBottom: 12,
   },
 
-  roomsButtonText: {
+  // Style for the Bookings button.
+  bookingsButton: {
+    backgroundColor: '#1F2937',
+    paddingVertical: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+
+  // Both buttons use the same text style.
+  buttonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
