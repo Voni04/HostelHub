@@ -2,6 +2,7 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const path = require("path");
 
 // Load environment variables from the .env file
 require("dotenv").config();
@@ -28,6 +29,19 @@ app.use(cors());
 
 // Allow Express to read JSON data sent in request bodies
 app.use(express.json());
+
+// Make uploaded images publicly accessible.
+//
+// Example:
+// If MongoDB stores:
+// uploads/123456-room.jpg
+//
+// The image can be accessed through:
+// http://SERVER_ADDRESS:5000/uploads/123456-room.jpg
+app.use(
+  "/uploads",
+  express.static(path.join(__dirname, "uploads"))
+);
 
 
 // ======================================================

@@ -8,6 +8,15 @@ import {
   useLocalSearchParams,
 } from 'expo-router';
 
+// Expo fetch supports File objects inside FormData.
+import { fetch } from 'expo/fetch';
+
+// File represents the new image selected from the phone.
+import { File } from 'expo-file-system';
+
+// ImagePicker lets the user choose a new room image.
+import * as ImagePicker from 'expo-image-picker';
+
 // SecureStore lets us read the JWT token
 // that was saved after login.
 import * as SecureStore from 'expo-secure-store';
@@ -20,6 +29,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -42,13 +52,40 @@ export default function EditRoomScreen() {
   const [capacity, setCapacity] = useState('');
   const [description, setDescription] = useState('');
 
+  // Store the existing image path from MongoDB.
+  //
+  // Example:
+  // uploads/123456789-room.jpg
+  const [existingImage, setExistingImage] = useState('');
+
+  // Store a NEW image selected by the user.
+  //
+  // This remains null if the user does not
+  // want to replace the existing image.
+  const [newImage, setNewImage] =
+    useState<ImagePicker.ImagePickerAsset | null>(null);
+
   // loading is used while getting the existing room.
   const [loading, setLoading] = useState(true);
 
   // updating is used while sending the PUT request.
   const [updating, setUpdating] = useState(false);
 
-  // Get the existing room information from the backend.
+  // API_URL contains /api at the end.
+  //
+  // Example:
+  // http://192.168.1.3:5000/api
+  //
+  // Uploaded images are available from:
+  // http://192.168.1.3:5000/uploads/...
+  //
+  // Therefore we remove /api when displaying images.
+  const SERVER_URL = API_URL.replace(/\/api\/?$/, '');
+
+  // ======================================================
+  // GET EXISTING ROOM
+  // ======================================================
+
   const fetchRoom = async () => {
     try {
       setLoading(true);
@@ -64,7 +101,8 @@ export default function EditRoomScreen() {
       }
 
       // Read the JWT saved during login.
-      const token = await SecureStore.getItemAsync('userToken');
+      const token =
+        await SecureStore.getItemAsync('userToken');
 
       if (!token) {
         Alert.alert(
@@ -97,24 +135,37 @@ export default function EditRoomScreen() {
         // Put the existing room information
         // into each form field.
         setRoomNumber(room.roomNumber);
+
         setRoomType(room.roomType);
+
         setPricePerMonth(
           String(room.pricePerMonth)
         );
+
         setCapacity(
           String(room.capacity)
         );
+
         setDescription(
           room.description || ''
+        );
+
+        // Save the existing image path.
+        setExistingImage(
+          room.image || ''
         );
       } else {
         Alert.alert(
           'Error',
-          data.message || 'Could not load the room.'
+          data.message ||
+            'Could not load the room.'
         );
       }
     } catch (error) {
-      console.log('Load room error:', error);
+      console.log(
+        'Load room error:',
+        error
+      );
 
       Alert.alert(
         'Connection Error',
@@ -130,7 +181,45 @@ export default function EditRoomScreen() {
     fetchRoom();
   }, [id]);
 
-  // This function runs when UPDATE ROOM is pressed.
+  // ======================================================
+  // CHOOSE A NEW IMAGE
+  // ======================================================
+
+  const pickNewImage = async () => {
+    // Ask permission to access the phone's photos.
+    const permissionResult =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permissionResult.granted) {
+      Alert.alert(
+        'Permission Required',
+        'Please allow access to your photos to select a room image.'
+      );
+
+      return;
+    }
+
+    // Open the phone gallery.
+    const result =
+      await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+    // Store the newly selected image.
+    if (
+      !result.canceled &&
+      result.assets.length > 0
+    ) {
+      setNewImage(result.assets[0]);
+    }
+  };
+
+  // ======================================================
+  // UPDATE ROOM
+  // ======================================================
+
   const handleUpdateRoom = async () => {
     // Remove unnecessary spaces.
     const cleanRoomNumber = roomNumber.trim();
@@ -201,7 +290,8 @@ export default function EditRoomScreen() {
       setUpdating(true);
 
       // Read the saved JWT.
-      const token = await SecureStore.getItemAsync('userToken');
+      const token =
+        await SecureStore.getItemAsync('userToken');
 
       if (!token) {
         Alert.alert(
@@ -212,6 +302,56 @@ export default function EditRoomScreen() {
         return;
       }
 
+      // Create FormData because the request may contain
+      // both normal text fields and an image.
+      const formData = new FormData();
+
+      // Add the edited room information.
+      formData.append(
+        'roomNumber',
+        cleanRoomNumber
+      );
+
+      formData.append(
+        'roomType',
+        cleanRoomType
+      );
+
+      formData.append(
+        'pricePerMonth',
+        String(priceNumber)
+      );
+
+      formData.append(
+        'capacity',
+        String(capacityNumber)
+      );
+
+      formData.append(
+        'description',
+        cleanDescription
+      );
+
+      // Only add an image to FormData if the user
+      // selected a NEW image.
+      //
+      // If newImage is null, no image is sent.
+      // The backend therefore keeps the old image.
+      if (newImage) {
+        // Create an Expo File from the local image URI.
+        const imageFile = new File(
+          newImage.uri
+        );
+
+        // "image" must match:
+        // upload.single("image")
+        // in roomRoutes.js.
+        formData.append(
+          'image',
+          imageFile
+        );
+      }
+
       // Send the updated information to the backend.
       const response = await fetch(
         `${API_URL}/rooms/${id}`,
@@ -219,45 +359,66 @@ export default function EditRoomScreen() {
           method: 'PUT',
 
           headers: {
-            'Content-Type': 'application/json',
+            // This is a protected route.
             Authorization: `Bearer ${token}`,
+
+            // Do NOT manually set Content-Type.
+            // Expo creates the multipart/form-data
+            // boundary automatically.
           },
 
-          // Send the edited room values.
-          body: JSON.stringify({
-            roomNumber: cleanRoomNumber,
-            roomType: cleanRoomType,
-            pricePerMonth: priceNumber,
-            capacity: capacityNumber,
-            description: cleanDescription,
-          }),
+          body: formData,
         }
       );
 
-      // Convert the backend response into JavaScript data.
-      const data = await response.json();
+      // Read as text first so an HTML server error
+      // does not cause a JSON parsing crash.
+      const responseText =
+        await response.text();
+
+      let data: any = {};
+
+      try {
+        // Try to convert the response into JSON.
+        data = JSON.parse(responseText);
+      } catch {
+        // Keep a readable message if the server
+        // returned something other than JSON.
+        data = {
+          message:
+            responseText ||
+            'Unexpected server response.',
+        };
+      }
 
       if (response.ok) {
         Alert.alert(
           'Room Updated',
-          'The room was updated successfully.',
+          newImage
+            ? 'The room and image were updated successfully.'
+            : 'The room was updated successfully.',
           [
             {
               text: 'OK',
 
               // Return to the Rooms screen after success.
-              onPress: () => router.replace('/rooms'),
+              onPress: () =>
+                router.replace('/rooms'),
             },
           ]
         );
       } else {
         Alert.alert(
           'Unable to Update Room',
-          data.message || 'Something went wrong.'
+          data.message ||
+            'Something went wrong.'
         );
       }
     } catch (error) {
-      console.log('Update room error:', error);
+      console.log(
+        'Update room error:',
+        error
+      );
 
       Alert.alert(
         'Connection Error',
@@ -273,7 +434,9 @@ export default function EditRoomScreen() {
   // room information is being downloaded.
   if (loading) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
+      <SafeAreaView
+        style={styles.loadingContainer}
+      >
         <ActivityIndicator size="large" />
 
         <Text style={styles.loadingText}>
@@ -285,7 +448,9 @@ export default function EditRoomScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+      >
         {/* Application name */}
         <Text style={styles.logo}>
           HostelHub
@@ -361,16 +526,68 @@ export default function EditRoomScreen() {
           textAlignVertical="top"
         />
 
+        {/* Room Image */}
+        <Text style={styles.label}>
+          Room Image
+        </Text>
+
+        {/*
+          If a NEW image has been selected,
+          show the new image preview.
+        */}
+        {newImage ? (
+          <Image
+            source={{
+              uri: newImage.uri,
+            }}
+            style={styles.imagePreview}
+            resizeMode="cover"
+          />
+        ) : existingImage ? (
+          /*
+            Otherwise display the room's
+            current image from the backend.
+          */
+          <Image
+            source={{
+              uri: `${SERVER_URL}/${existingImage}`,
+            }}
+            style={styles.imagePreview}
+            resizeMode="cover"
+          />
+        ) : (
+          // Older rooms may not have an image.
+          <Text style={styles.noImageText}>
+            No room image available.
+          </Text>
+        )}
+
+        {/* Choose another image from the phone. */}
+        <Pressable
+          style={styles.imageButton}
+          onPress={pickNewImage}
+          disabled={updating}
+        >
+          <Text style={styles.imageButtonText}>
+            {newImage
+              ? 'CHOOSE ANOTHER IMAGE'
+              : 'CHANGE ROOM IMAGE'}
+          </Text>
+        </Pressable>
+
         {/* Update button */}
         <Pressable
           style={[
             styles.updateButton,
-            updating && styles.disabledButton,
+            updating &&
+              styles.disabledButton,
           ]}
           onPress={handleUpdateRoom}
           disabled={updating}
         >
-          <Text style={styles.updateButtonText}>
+          <Text
+            style={styles.updateButtonText}
+          >
             {updating
               ? 'UPDATING ROOM...'
               : 'UPDATE ROOM'}
@@ -441,6 +658,33 @@ const styles = StyleSheet.create({
 
   descriptionInput: {
     minHeight: 100,
+  },
+
+  imagePreview: {
+    width: '100%',
+    height: 220,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+
+  noImageText: {
+    fontSize: 15,
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+
+  imageButton: {
+    backgroundColor: '#374151',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+
+  imageButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 
   updateButton: {

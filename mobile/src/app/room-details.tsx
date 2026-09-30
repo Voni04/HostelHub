@@ -20,6 +20,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -74,7 +75,8 @@ export default function RoomDetailsScreen() {
       }
 
       // Read the JWT saved during login.
-      const token = await SecureStore.getItemAsync('userToken');
+      const token =
+        await SecureStore.getItemAsync('userToken');
 
       if (!token) {
         Alert.alert(
@@ -106,7 +108,8 @@ export default function RoomDetailsScreen() {
       } else {
         Alert.alert(
           'Error',
-          data.message || 'Could not load room details.'
+          data.message ||
+            'Could not load room details.'
         );
       }
     } catch (error) {
@@ -132,7 +135,8 @@ export default function RoomDetailsScreen() {
       setDeleting(true);
 
       // Read the JWT saved during login.
-      const token = await SecureStore.getItemAsync('userToken');
+      const token =
+        await SecureStore.getItemAsync('userToken');
 
       if (!token) {
         Alert.alert(
@@ -167,14 +171,16 @@ export default function RoomDetailsScreen() {
               text: 'OK',
 
               // Return to the Rooms screen after deletion.
-              onPress: () => router.replace('/rooms'),
+              onPress: () =>
+                router.replace('/rooms'),
             },
           ]
         );
       } else {
         Alert.alert(
           'Unable to Delete Room',
-          data.message || 'Something went wrong.'
+          data.message ||
+            'Something went wrong.'
         );
       }
     } catch (error) {
@@ -210,9 +216,22 @@ export default function RoomDetailsScreen() {
     );
   };
 
+  // Build the base address of the backend.
+  //
+  // API_URL currently looks like:
+  // http://192.168.1.3:5000/api
+  //
+  // Uploaded images are served from:
+  // http://192.168.1.3:5000/uploads/...
+  //
+  // Therefore we remove "/api" from API_URL.
+  const SERVER_URL = API_URL.replace(/\/api\/?$/, '');
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+      >
         {/* Application name */}
         <Text style={styles.logo}>
           HostelHub
@@ -228,6 +247,24 @@ export default function RoomDetailsScreen() {
           <ActivityIndicator size="large" />
         ) : room ? (
           <View style={styles.roomCard}>
+            {/* Display the uploaded room image. */}
+            {room.image ? (
+              <Image
+                source={{
+                  uri: `${SERVER_URL}/${room.image}`,
+                }}
+                style={styles.roomImage}
+                resizeMode="cover"
+              />
+            ) : (
+              // Older rooms may not have an image.
+              <View style={styles.noImageContainer}>
+                <Text style={styles.noImageText}>
+                  No room image available
+                </Text>
+              </View>
+            )}
+
             {/* Room number */}
             <Text style={styles.roomNumber}>
               Room {room.roomNumber}
@@ -278,7 +315,8 @@ export default function RoomDetailsScreen() {
             </Text>
 
             <Text style={styles.value}>
-              {room.description || 'No description available.'}
+              {room.description ||
+                'No description available.'}
             </Text>
 
             {/* Open Edit Room and send the room ID. */}
@@ -302,12 +340,15 @@ export default function RoomDetailsScreen() {
             <Pressable
               style={[
                 styles.deleteButton,
-                deleting && styles.disabledButton,
+                deleting &&
+                  styles.disabledButton,
               ]}
               onPress={handleDeleteRoom}
               disabled={deleting}
             >
-              <Text style={styles.deleteButtonText}>
+              <Text
+                style={styles.deleteButtonText}
+              >
                 {deleting
                   ? 'DELETING...'
                   : 'DELETE ROOM'}
@@ -356,6 +397,30 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: '#E5E7EB',
+  },
+
+  // Style for an uploaded room image.
+  roomImage: {
+    width: '100%',
+    height: 220,
+    borderRadius: 10,
+    marginBottom: 20,
+  },
+
+  // Placeholder area for old rooms
+  // that do not have an image.
+  noImageContainer: {
+    height: 150,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+
+  noImageText: {
+    fontSize: 15,
+    color: '#6B7280',
   },
 
   roomNumber: {

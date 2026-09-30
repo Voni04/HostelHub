@@ -1,43 +1,40 @@
-// Import Express so we can create Room API routes
+// Import Express
 const express = require("express");
-
-// Import the createRoom function from the Room controller
-const { 
-    createRoom,
-    getAllRooms,
-    getRoomById,
-    updateRoom,
-    deleteRoom,
-} = require("../controllers/roomController");
-
-// Import authentication middleware
-// This will make sure only logged-in users can access protected routes
-const { protect } = require("../middleware/authMiddleware");
 
 // Create an Express router
 const router = express.Router();
 
-// Create a new room
-// POST /api/rooms
-// The user must provide a valid JWT before createRoom is executed
-// User must be logged in to view the rooms
-router.post("/", protect, createRoom);
+// Import Room controller functions
+const {
+  createRoom,
+  getAllRooms,
+  getRoomById,
+  updateRoom,
+  deleteRoom,
+} = require("../controllers/roomController");
 
-// Get all rooms
-// GET /api/rooms
+// Import JWT authentication middleware
+const { protect } = require("../middleware/authMiddleware");
+
+// Import image upload middleware
+const upload = require("../middleware/uploadMiddleware");
+
+// CREATE a new room
+// "image" is the field name that will contain the uploaded image
+router.post("/", protect, upload.single("image"), createRoom);
+
+// READ all rooms
 router.get("/", protect, getAllRooms);
 
-// Get one specific room using its MongoDB ID
-// GET /api/rooms/:id
+// READ one room by its MongoDB ID
 router.get("/:id", protect, getRoomById);
 
-// Update one specific room
-// PUT /api/rooms/:id
-router.put("/:id", protect, updateRoom);
+// UPDATE a room
+// An image can also be uploaded when editing a room
+router.put("/:id", protect, upload.single("image"), updateRoom);
 
-// Delete one specific room
-// DELETE /api/rooms/:id
+// DELETE a room
 router.delete("/:id", protect, deleteRoom);
 
-// Export the router so server.js can use it
+// Export the router
 module.exports = router;

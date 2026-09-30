@@ -30,6 +30,12 @@ const createRoom = async (req, res) => {
       });
     }
 
+    // If an image was uploaded by Multer, save its path.
+    // Example stored value: uploads/123456789-room.jpg
+    const imagePath = req.file
+      ? `uploads/${req.file.filename}`
+      : "";
+
     // Create and save the new room in MongoDB
     const newRoom = await Room.create({
       roomNumber,
@@ -37,6 +43,7 @@ const createRoom = async (req, res) => {
       pricePerMonth,
       capacity,
       description,
+      image: imagePath,
     });
 
     // Return the newly created room
@@ -125,8 +132,8 @@ const updateRoom = async (req, res) => {
       });
     }
 
-    // Update only the fields provided in the request body
-    // If a field is not provided, keep its existing value
+    // Update only the fields provided in the request body.
+    // If a field is not provided, keep its existing value.
     room.roomNumber = req.body.roomNumber ?? room.roomNumber;
     room.roomType = req.body.roomType ?? room.roomType;
     room.pricePerMonth =
@@ -134,6 +141,12 @@ const updateRoom = async (req, res) => {
     room.capacity = req.body.capacity ?? room.capacity;
     room.description =
       req.body.description ?? room.description;
+
+    // If a new image was uploaded, replace the stored image path.
+    // If no new image was uploaded, keep the existing image.
+    if (req.file) {
+      room.image = `uploads/${req.file.filename}`;
+    }
 
     // Save the updated room in MongoDB
     const updatedRoom = await room.save();
@@ -186,7 +199,7 @@ const deleteRoom = async (req, res) => {
   }
 };
 
-// Export the function so it can be used in room routes
+// Export the functions so they can be used in room routes
 module.exports = {
   createRoom,
   getAllRooms,
