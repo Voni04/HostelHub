@@ -30,6 +30,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { API_URL } from '../services/api';
 
 
+// ======================================================
+// TYPES
+// ======================================================
+
 // Define the User information returned by populate().
 type BookingUser = {
   _id: string;
@@ -51,8 +55,18 @@ type BookingRoom = {
 // Define the structure of one Booking.
 type Booking = {
   _id: string;
+
+  // Normally userId contains the populated User.
   userId: BookingUser;
-  roomId: BookingRoom;
+
+  // IMPORTANT:
+  // If the Room was deleted after the Booking was created,
+  // Mongoose populate() returns null for roomId.
+  //
+  // Therefore roomId must be allowed to contain either
+  // the populated Room object or null.
+  roomId: BookingRoom | null;
+
   bookingDate: string;
   startDate: string;
   endDate: string;
@@ -60,11 +74,19 @@ type Booking = {
 };
 
 
+// ======================================================
+// DATE FORMATTER
+// ======================================================
+
 // Convert MongoDB dates into an easier-to-read format.
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString();
 };
 
+
+// ======================================================
+// BOOKING DETAILS SCREEN
+// ======================================================
 
 export default function BookingDetailsScreen() {
   // Receive the booking ID passed from bookings.tsx.
@@ -119,6 +141,7 @@ export default function BookingDetailsScreen() {
 
       // Store the booking returned by the backend.
       setBooking(data.booking);
+
     } catch (error) {
       Alert.alert(
         'Connection Error',
@@ -146,6 +169,17 @@ export default function BookingDetailsScreen() {
     newStatus: 'Approved' | 'Rejected'
   ) => {
     try {
+      // A booking whose Room was deleted should not
+      // be approved or rejected because the related
+      // Room no longer exists.
+      if (!booking?.roomId) {
+        Alert.alert(
+          'Room Not Available',
+          'This booking belongs to a room that has been deleted.'
+        );
+        return;
+      }
+
       // Disable the status buttons while the request runs.
       setUpdatingStatus(true);
 
@@ -200,6 +234,7 @@ export default function BookingDetailsScreen() {
       // This makes the displayed Status change from
       // Pending to Approved or Rejected.
       await fetchBooking();
+
     } catch (error) {
       Alert.alert(
         'Connection Error',
@@ -291,8 +326,11 @@ export default function BookingDetailsScreen() {
         return;
       }
 
-      // If this was an Approved booking,
-      // the backend also releases its room occupancy.
+      // If this was an Approved booking and the Room
+      // still exists, the backend releases its occupancy.
+      //
+      // If the Room was already deleted, the backend
+      // should simply remove the orphaned Booking.
       Alert.alert(
         'Success',
         'Booking deleted successfully',
@@ -303,6 +341,7 @@ export default function BookingDetailsScreen() {
           },
         ]
       );
+
     } catch (error) {
       Alert.alert(
         'Connection Error',
@@ -359,28 +398,73 @@ export default function BookingDetailsScreen() {
   }
 
 
+  // ======================================================
+  // SCREEN UI
+  // ======================================================
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
+
         {/* Screen heading */}
         <Text style={styles.title}>
           Booking Details
         </Text>
 
+
         {/* Main booking information card */}
         <View style={styles.card}>
-          <Text style={styles.roomNumber}>
-            Room {booking.roomId.roomNumber}
-          </Text>
 
-          <Text style={styles.detailText}>
-            Room Type: {booking.roomId.roomType}
-          </Text>
+          {/*
+            If the related Room still exists,
+            display all Room information normally.
+          */}
+          {booking.roomId ? (
+            <>
+              <Text style={styles.roomNumber}>
+                Room {booking.roomId.roomNumber}
+              </Text>
 
-          <Text style={styles.detailText}>
-            Price: Rs. {booking.roomId.pricePerMonth}/month
-          </Text>
+              <Text style={styles.detailText}>
+                Room Type: {booking.roomId.roomType}
+              </Text>
 
+              <Text style={styles.detailText}>
+                Price: Rs. {booking.roomId.pricePerMonth}/month
+              </Text>
+
+              <Text style={styles.detailText}>
+                Occupancy: {booking.roomId.currentOccupancy}
+                /{booking.roomId.capacity}
+              </Text>
+
+              <Text style={styles.detailText}>
+                Room Availability:{' '}
+                {booking.roomId.availabilityStatus}
+              </Text>
+            </>
+          ) : (
+            /*
+              If the Room has been deleted, populate()
+              returns null.
+
+              Instead of crashing the app, show a clear
+              message to the user.
+            */
+            <>
+              <Text style={styles.roomNumber}>
+                Room no longer available
+              </Text>
+
+              <Text style={styles.deletedRoomText}>
+                The room connected to this booking has been deleted.
+              </Text>
+            </>
+          )}
+
+
+          {/* Booking information can still be displayed
+              even when the related Room was deleted. */}
           <Text style={styles.detailText}>
             Start Date: {formatDate(booking.startDate)}
           </Text>
@@ -393,6 +477,8 @@ export default function BookingDetailsScreen() {
             Status: {booking.status}
           </Text>
 
+
+          {/* User information */}
           <Text style={styles.detailText}>
             Booked By: {booking.userId.name}
           </Text>
@@ -401,26 +487,22 @@ export default function BookingDetailsScreen() {
             Email: {booking.userId.email}
           </Text>
 
-          <Text style={styles.detailText}>
-            Occupancy: {booking.roomId.currentOccupancy}
-            /{booking.roomId.capacity}
-          </Text>
-
-          <Text style={styles.detailText}>
-            Room Availability:{' '}
-            {booking.roomId.availabilityStatus}
-          </Text>
         </View>
 
 
         {/* =================================================
             APPROVE / REJECT
 
-            These buttons only appear while the booking
-            is still Pending.
+            These buttons only appear while:
+            1. The booking is Pending
+            2. The related Room still exists
+
+            A booking cannot be approved if its Room
+            has already been deleted.
         ================================================= */}
-        {booking.status === 'Pending' && (
+        {booking.status === 'Pending' && booking.roomId && (
           <View style={styles.statusButtons}>
+
             <Pressable
               style={[
                 styles.approveButton,
@@ -436,6 +518,7 @@ export default function BookingDetailsScreen() {
               </Text>
             </Pressable>
 
+
             <Pressable
               style={[
                 styles.rejectButton,
@@ -448,29 +531,44 @@ export default function BookingDetailsScreen() {
                 REJECT
               </Text>
             </Pressable>
+
           </View>
         )}
 
 
-        {/* Edit Booking button */}
-        <Pressable
-          style={styles.editButton}
-          onPress={() =>
-            router.push({
-              pathname: '/edit-booking',
-              params: {
-                id: booking._id,
-              },
-            })
-          }
-        >
-          <Text style={styles.buttonText}>
-            EDIT BOOKING
-          </Text>
-        </Pressable>
+        {/* 
+          Edit Booking button.
+
+          Only show Edit when the related Room still exists.
+          There is no useful reason to edit dates for a
+          booking whose Room has already been deleted.
+        */}
+        {booking.roomId && (
+          <Pressable
+            style={styles.editButton}
+            onPress={() =>
+              router.push({
+                pathname: '/edit-booking',
+                params: {
+                  id: booking._id,
+                },
+              })
+            }
+          >
+            <Text style={styles.buttonText}>
+              EDIT BOOKING
+            </Text>
+          </Pressable>
+        )}
 
 
-        {/* Delete Booking button */}
+        {/*
+          Delete Booking remains available even when the
+          Room has been deleted.
+
+          This allows the user to clean up an old booking
+          that references a Room that no longer exists.
+        */}
         <Pressable
           style={[
             styles.deleteButton,
@@ -485,6 +583,7 @@ export default function BookingDetailsScreen() {
               : 'DELETE BOOKING'}
           </Text>
         </Pressable>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -537,6 +636,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#4B5563',
     marginBottom: 8,
+  },
+
+  // Used when the related Room has been deleted.
+  deletedRoomText: {
+    fontSize: 15,
+    color: '#6B7280',
+    marginBottom: 16,
   },
 
   statusButtons: {

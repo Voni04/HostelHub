@@ -25,6 +25,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { API_URL } from '../services/api';
 
 
+// ======================================================
+// TYPES
+// ======================================================
+
 // Define the structure of User information
 // returned by populate() from the backend.
 type BookingUser = {
@@ -46,8 +50,21 @@ type BookingRoom = {
 // Define the structure of one Booking.
 type Booking = {
   _id: string;
+
+  // Normally userId contains the populated User.
   userId: BookingUser;
-  roomId: BookingRoom;
+
+  // roomId normally contains the populated Room.
+  //
+  // However, if a Room has been deleted while an old
+  // Booking still references that Room, Mongoose
+  // populate() can return null for roomId.
+  //
+  // Therefore we allow roomId to be either:
+  // - BookingRoom
+  // - null
+  roomId: BookingRoom | null;
+
   bookingDate: string;
   startDate: string;
   endDate: string;
@@ -55,12 +72,20 @@ type Booking = {
 };
 
 
+// ======================================================
+// DATE FORMATTER
+// ======================================================
+
 // This function converts a MongoDB date into
 // an easier-to-read date for the mobile screen.
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString();
 };
 
+
+// ======================================================
+// BOOKINGS SCREEN
+// ======================================================
 
 export default function BookingsScreen() {
   // Store all bookings returned by the backend.
@@ -102,6 +127,7 @@ export default function BookingsScreen() {
       }
 
       // Our backend returns:
+      //
       // {
       //   message: "...",
       //   count: ...,
@@ -130,11 +156,17 @@ export default function BookingsScreen() {
   }, []);
 
 
+  // ======================================================
+  // SCREEN UI
+  // ======================================================
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
+
         {/* Screen heading */}
         <Text style={styles.title}>Bookings</Text>
+
 
         {/* Open the Create Booking screen. */}
         <Pressable
@@ -146,6 +178,7 @@ export default function BookingsScreen() {
           </Text>
         </Pressable>
 
+
         {/* Show a loading indicator while fetching data. */}
         {loading ? (
           <ActivityIndicator
@@ -153,11 +186,14 @@ export default function BookingsScreen() {
             style={styles.loader}
           />
         ) : bookings.length === 0 ? (
+
           // Show this message if there are no bookings.
           <Text style={styles.emptyText}>
             No bookings found.
           </Text>
+
         ) : (
+
           // Display every booking returned by the backend.
           bookings.map((booking) => (
             <Pressable
@@ -178,33 +214,62 @@ export default function BookingsScreen() {
                 })
               }
             >
+
+              {/* 
+                IMPORTANT:
+                If the Room was deleted, roomId can be null.
+
+                We check roomId before trying to access
+                roomNumber. This prevents the app from crashing.
+              */}
               <Text style={styles.roomNumber}>
-                Room {booking.roomId.roomNumber}
+                {booking.roomId
+                  ? `Room ${booking.roomId.roomNumber}`
+                  : 'Room no longer available'}
               </Text>
 
+
+              {/*
+                Only display the room type when the related
+                Room still exists.
+
+                If the Room has been deleted, show a helpful
+                message instead.
+              */}
               <Text style={styles.detailText}>
-                Room Type: {booking.roomId.roomType}
+                {booking.roomId
+                  ? `Room Type: ${booking.roomId.roomType}`
+                  : 'Room Type: Not available'}
               </Text>
 
+
+              {/* Display the booking start date. */}
               <Text style={styles.detailText}>
                 Start Date: {formatDate(booking.startDate)}
               </Text>
 
+
+              {/* Display the booking end date. */}
               <Text style={styles.detailText}>
                 End Date: {formatDate(booking.endDate)}
               </Text>
 
+
+              {/* Display the current booking status. */}
               <Text style={styles.detailText}>
                 Status: {booking.status}
               </Text>
+
 
               {/* Tell the user that the card can be opened. */}
               <Text style={styles.tapText}>
                 Tap to view details
               </Text>
+
             </Pressable>
           ))
         )}
+
       </ScrollView>
     </SafeAreaView>
   );
