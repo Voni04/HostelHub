@@ -217,13 +217,6 @@ export default function RoomDetailsScreen() {
   };
 
   // Build the base address of the backend.
-  //
-  // API_URL currently looks like:
-  // http://192.168.1.3:5000/api
-  //
-  // Uploaded images are served from:
-  // http://192.168.1.3:5000/uploads/...
-  //
   // Therefore we remove "/api" from API_URL.
   const SERVER_URL = API_URL.replace(/\/api\/?$/, '');
 
@@ -251,8 +244,13 @@ export default function RoomDetailsScreen() {
             {room.image ? (
               <Image
                 source={{
-                  uri: `${SERVER_URL}/${room.image}`,
-                }}
+  // New Cloudinary images already contain a complete HTTPS URL.
+  // Old images contain only "uploads/...", so they still need
+  // the backend server address added in front.
+                    uri: room.image.startsWith('http')
+                      ? room.image
+                      : `${SERVER_URL}/${room.image}`,
+                    }}
                 style={styles.roomImage}
                 resizeMode="cover"
               />

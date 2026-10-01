@@ -52,9 +52,12 @@ export default function EditRoomScreen() {
   const [capacity, setCapacity] = useState('');
   const [description, setDescription] = useState('');
 
-  // Store the existing image path from MongoDB.
+  // Store the existing image value from MongoDB.
   //
-  // Example:
+  // New rooms can contain a complete Cloudinary URL:
+  // https://res.cloudinary.com/...
+  //
+  // Older rooms may contain:
   // uploads/123456789-room.jpg
   const [existingImage, setExistingImage] = useState('');
 
@@ -76,10 +79,11 @@ export default function EditRoomScreen() {
   // Example:
   // http://192.168.1.3:5000/api
   //
-  // Uploaded images are available from:
+  // Older locally stored images were available from:
   // http://192.168.1.3:5000/uploads/...
   //
-  // Therefore we remove /api when displaying images.
+  // Therefore we remove /api when we need
+  // to display an older local image.
   const SERVER_URL = API_URL.replace(/\/api\/?$/, '');
 
   // ======================================================
@@ -150,7 +154,8 @@ export default function EditRoomScreen() {
           room.description || ''
         );
 
-        // Save the existing image path.
+        // Save the existing image value.
+        // This can be a Cloudinary URL or an older local path.
         setExistingImage(
           room.image || ''
         );
@@ -546,11 +551,19 @@ export default function EditRoomScreen() {
         ) : existingImage ? (
           /*
             Otherwise display the room's
-            current image from the backend.
+            current image.
+
+            Cloudinary images already contain a complete
+            HTTPS URL, so we use them directly.
+
+            Older images contain "uploads/...", so they
+            still need the backend server URL.
           */
           <Image
             source={{
-              uri: `${SERVER_URL}/${existingImage}`,
+              uri: existingImage.startsWith('http')
+                ? existingImage
+                : `${SERVER_URL}/${existingImage}`,
             }}
             style={styles.imagePreview}
             resizeMode="cover"

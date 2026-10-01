@@ -30,11 +30,12 @@ const createRoom = async (req, res) => {
       });
     }
 
-    // If an image was uploaded by Multer, save its path.
-    // Example stored value: uploads/123456789-room.jpg
-    const imagePath = req.file
-      ? `uploads/${req.file.filename}`
-      : "";
+    // If an image was uploaded to Cloudinary,
+    // req.file.path contains the permanent Cloudinary image URL.
+    //
+    // Example:
+    // https://res.cloudinary.com/.../hostelhub/rooms/room-image.jpg
+    const imageUrl = req.file ? req.file.path : "";
 
     // Create and save the new room in MongoDB
     const newRoom = await Room.create({
@@ -43,7 +44,7 @@ const createRoom = async (req, res) => {
       pricePerMonth,
       capacity,
       description,
-      image: imagePath,
+      image: imageUrl,
     });
 
     // Return the newly created room
@@ -64,8 +65,8 @@ const createRoom = async (req, res) => {
 // Get all rooms from MongoDB
 const getAllRooms = async (req, res) => {
   try {
-    // Find all Room documents in the database
-    // sort() displays the newest rooms first
+    // Find all Room documents in the database.
+    // sort() displays the newest rooms first.
     const rooms = await Room.find().sort({ createdAt: -1 });
 
     // Return all rooms to the client
@@ -88,7 +89,6 @@ const getAllRooms = async (req, res) => {
 const getRoomById = async (req, res) => {
   try {
     // Get the room ID from the URL parameter
-    // Example: /api/rooms/68d8abc123...
     const roomId = req.params.id;
 
     // Search MongoDB for a room with this ID
@@ -142,10 +142,13 @@ const updateRoom = async (req, res) => {
     room.description =
       req.body.description ?? room.description;
 
-    // If a new image was uploaded, replace the stored image path.
-    // If no new image was uploaded, keep the existing image.
+    // If a new image was uploaded to Cloudinary,
+    // replace the old image URL with the new Cloudinary URL.
+    //
+    // If no new image was selected,
+    // the room keeps its existing image.
     if (req.file) {
-      room.image = `uploads/${req.file.filename}`;
+      room.image = req.file.path;
     }
 
     // Save the updated room in MongoDB
